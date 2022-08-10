@@ -46,6 +46,8 @@ enum Commands {
     Account,
     /// Lists the configured RPC URLs for all blockchains.
     List,
+    /// Have the offchain worker faking tasks to test OCW capabilities.
+    FakeTask(FakeTaskArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -143,6 +145,7 @@ impl Run for Commands {
             Commands::List => list(api).await,
             Commands::Account => authority_account_command(api).await,
             Commands::LogFilter(log_filter) => log_filter.run(api).await,
+            Commands::FakeTask(args) => args.run(api).await,
         }
     }
 }
@@ -400,4 +403,28 @@ async fn main() -> Result<()> {
     cli.command.run(&client).await?;
 
     Ok(())
+}
+
+#[derive(Debug, Clone, Args)]
+struct FakeTaskArgs {
+    /// Simulate rpc-call verification; sleep for <sleep> millis
+    #[clap(short, long, default_value = "100")]
+    sleep: u64,
+    /// The number of tasks to submit per OCW spawn
+    #[clap(short, long, default_value = "1")]
+    count: u32,
+}
+
+#[async_trait]
+impl Run for FakeTaskArgs {
+    async fn run(self, api: &RuntimeApi) -> Result<()> {
+        let key = StorageKey(b"FakeTask".to_vec());
+        let Self { sleep, count } = self;
+        let value = StorageData((sleep, count).encode());
+        api.client
+            .rpc()
+            .set_offchain_storage(StorageKind::Persistent, &key, &value)
+            .await?;
+        Ok(())
+    }
 }
